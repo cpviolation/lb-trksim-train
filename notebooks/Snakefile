@@ -25,7 +25,7 @@ rule all:
 rule preprocessing:
     input:
         notebook="Preprocessing.ipynb",
-        data_files=glob(str(DATA_STORAGE/"j100/*.root"))
+        data_files=glob(str(DATA_STORAGE/"10134000/*.root"))
     
     
     output:
