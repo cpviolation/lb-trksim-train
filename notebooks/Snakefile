@@ -1,10 +1,15 @@
+# execute with --config tset=j100
+
 from glob import glob
 from os import environ
 from pathlib import Path
 
+configfile: "train_conf.yaml"
+tset = config.get('tset',"j100")
+
 environ['HOME_DIR'            ] = Path("/workarea/local/shared").as_posix() +"/"+ environ['USERNAME']
 environ['DATA_STORAGE'        ] = Path("/workarea/local/private/cache/data").as_posix()
-environ['TRAINING_DATA_FOLDER'] = Path("/j100").as_posix() # Path("/2016MU/10134000").as_posix() #
+environ['TRAINING_DATA_FOLDER'] = config['training_folder'][tset]
 environ['MODEL_STORAGE'       ] = environ['HOME_DIR'] + "/trained_models" + environ['TRAINING_DATA_FOLDER']
 environ['NB_EXPORT'           ] = "False"
 environ['FEATHER_FOLDER'      ] = environ['HOME_DIR'] + "/lb-trksim-train/notebooks/feather_folder" + environ['TRAINING_DATA_FOLDER']
