@@ -48,7 +48,7 @@ rule preprocessing:
         efficiency_validation=directory(environ['FEATHER_FOLDER']+"/efficiency-validation")
         
     log:
-        repo="reports"+environ['TRAINING_DATA_FOLDER']+"/preprocessing.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/preprocessing.html"
         
     benchmark:
         "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/preprocessing.txt"
@@ -83,7 +83,7 @@ rule train_acceptance:
         model_pb=environ['MODEL_STORAGE']+"/models/acceptance/saved_model.pb"
         
     log:
-        repo="reports"+environ['TRAINING_DATA_FOLDER']+"/train_acceptance.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/train_acceptance.html"
         
     benchmark:
         "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/train_acceptance.txt"
@@ -110,7 +110,7 @@ rule validate_acceptance:
         model_pb=environ['MODEL_STORAGE']+"/models/acceptance/saved_model.pb"
         
     log:
-        repo="reports"+environ['TRAINING_DATA_FOLDER']+"/validate_acceptance.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/validate_acceptance.html"
         
     benchmark:
         "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/validate_acceptance.txt"
@@ -138,7 +138,7 @@ rule train_efficiency:
         model_pb=environ['MODEL_STORAGE']+"/models/efficiency/saved_model.pb"
         
     log:
-        repo="reports"+environ['TRAINING_DATA_FOLDER']+"/train_efficiency.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/train_efficiency.html"
         
     benchmark:
         "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/train_efficiency.txt"
@@ -165,7 +165,7 @@ rule validate_efficiency:
         model_pb=environ['MODEL_STORAGE']+"/models/efficiency/saved_model.pb"
         
     log:
-        repo="reports"+environ['TRAINING_DATA_FOLDER']+"/validate_efficiency.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/validate_efficiency.html"
         
     benchmark:
         "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/validate_efficiency.txt"
@@ -202,7 +202,7 @@ rule preprocessing_gans:
 
         
     log:
-        repo="reports"+environ['TRAINING_DATA_FOLDER']+"/preprocessing_gans.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/preprocessing_gans.html"
         
     benchmark:
         "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/preprocessing_gans.txt"
@@ -239,7 +239,7 @@ rule train_resolution:
         model_pb=environ['MODEL_STORAGE']+"/models/resolution/saved_model.pb"
         
     log:
-        repo="reports"+environ['TRAINING_DATA_FOLDER']+"/train_resolution.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/train_resolution.html"
         
     benchmark:
         "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/train_resolution.txt"
@@ -268,7 +268,7 @@ rule validate_resolution:
         preprocessing_y=environ['MODEL_STORAGE']+"/models/resolution/tY.pkl",
         
     log:
-        repo="reports"+environ['TRAINING_DATA_FOLDER']+"/validate_resolution.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/validate_resolution.html"
         
     benchmark:
         "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/validate_resolution.txt"
@@ -298,7 +298,7 @@ rule train_covariance:
         model_pb=environ['MODEL_STORAGE']+"/models/covariance/saved_model.pb"
         
     log:
-        repo="reports"+environ['TRAINING_DATA_FOLDER']+"/train_covariance.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/train_covariance.html"
         
     benchmark:
         "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/train_covariance.txt"
@@ -327,7 +327,7 @@ rule validate_covariance:
         preprocessing_y=environ['MODEL_STORAGE']+"/models/covariance/tY.pkl",
         
     log:
-        repo="reports"+environ['TRAINING_DATA_FOLDER']+"/validate_covariance.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/validate_covariance.html"
         
     benchmark:
         "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/validate_covariance.txt"
@@ -360,7 +360,7 @@ rule deploy:
         covariance_data=environ['FEATHER_FOLDER']+"/covariance-validation"
        
     log:
-        repo="reports"+environ['TRAINING_DATA_FOLDER']+"/deploy.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/deploy.html"
         
     benchmark:
         "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/deploy.txt"
