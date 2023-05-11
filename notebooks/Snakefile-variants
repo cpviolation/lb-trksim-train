@@ -1,0 +1,115 @@
+# prerequisite: preprocessing of all dataset
+# execute with: snakemake -s Snakefile-variants --forceall --keep-incomplete --resource gpu=1
+# create DAG plot with: snakemake -s Snakefile-variants --forceall --dag | dot -Tpdf > dag.pdf
+ 
+# directive for correct order of execution
+ruleorder: train_model_variants > train_model
+# dictionary holding the model's home directories and variant labels
+configfile: "variant_config.yaml" 
+
+from glob import glob
+from os import environ,path
+from copy import deepcopy
+from pathlib import Path
+from json import load
+from pprint import pprint
+
+# load definition of variant models and training folders
+with open("Models_definitions.json") as mdl_file:
+    models_def = load(mdl_file)
+        
+models_collection = dict() # collect the info identical for all the models
+
+for train_key in config['training_folder'].keys():
+    models_collection[train_key] = dict()
+    
+    models_collection[train_key]['HOME_DIR']             = "/workarea/local/shared/"+ environ['USERNAME']
+    models_collection[train_key]['TRAINING_DATA_FOLDER'] = config['training_folder'][train_key]
+    models_collection[train_key]['MODEL_STORAGE']        = models_collection[train_key]['HOME_DIR']+"/trained_models"+models_collection[train_key]['TRAINING_DATA_FOLDER']
+    models_collection[train_key]['FEATHER_FOLDER']       = models_collection[train_key]['HOME_DIR'] + \
+                                                           "/lb-trksim-train/notebooks/feather_folder" + \
+                                                           models_collection[train_key]['TRAINING_DATA_FOLDER']
+
+collection = dict()   # collect all the infos of all the models
+models_paths = dict() # collect all the model paths
+
+for model in ["efficiency","acceptance"]:
+    collection[model] = dict(variants=[])
+    
+    models_paths[model] = dict() # create list of models and possible variants
+    for train_key in config['training_folder'].keys():
+        collection[model][train_key] = dict(models_collection[train_key])
+        
+        collection[model][train_key]['TRAIN_DATA'      ] = collection[model][train_key]['FEATHER_FOLDER']+f"/{model}-train"
+        collection[model][train_key]['VALIDATION_DATA' ] = collection[model][train_key]['FEATHER_FOLDER']+f"/{model}-validation"
+        collection[model][train_key]['OUTPUT_MODEL'    ] = collection[model][train_key]['MODEL_STORAGE']+f"/models/{model}/saved_model.pb"
+        collection[model][train_key]['MODEL_VARIANT'   ] = '' # default key is empty string
+        collection[model][train_key]['MODEL_DEFINITION'] = models_def[model]['']
+    
+        models_paths[model][train_key] = dict(model=models_collection[train_key]['MODEL_STORAGE']+f"/models/{model}/model_info.md")
+        # if present add variants models paths
+        if  len( config['model_variants'][model].get(train_key,[]) ) > 0:
+            models_paths[model][train_key]['variants'] = []
+            for variant in config['model_variants'][model][train_key]:
+                models_paths[model][train_key]['variants'].append(models_collection[train_key]['MODEL_STORAGE']+f"/models/{model}/{variant}/model_info.md")
+
+# models paths with wildcards to parallelize training
+modelpath_wildcards   = "/workarea/local/shared/"+ environ['USERNAME'] + "/trained_models/{folder}/models/{model}/model_info.md"
+variantpath_wildcards = "/workarea/local/shared/"+ environ['USERNAME'] + "/trained_models/{folder}/models/{model}/{variant}/model_info.md"
+
+# needed to access environ variables from train_folder and not from train_key
+inverse_map = {v: k for k, v in config['training_folder'].items()}
+
+# environment variables used by the notebooks
+env_keys = ["HOME_DIR","TRAINING_DATA_FOLDER","MODEL_STORAGE","FEATHER_FOLDER", \
+                        "TRAIN_DATA","VALIDATION_DATA","OUTPUT_MODEL","MODEL_VARIANT","MODEL_DEFINITION"]
+
+#the export to html is done by snakemake
+environ['NB_EXPORT'] = "False"
+
+all_models = [] # list of all notebooks paths to be trained
+for model in models_paths.keys():
+    for train_key in models_paths[model].keys():
+        all_models.append(models_paths[model][train_key]['model'])                  # default model
+        all_models = all_models + models_paths[model][train_key].get('variants',[]) # possible variants
+
+rule all:
+    input:
+        all_models
+    output:
+        "touched/all.done"
+    message: "trained these models: {input}"
+    
+    run:
+        shell("touch {output}")
+        
+rule train_model_variants:
+    input:
+        modelpath_wildcards
+    output:
+        variantpath_wildcards
+    params:
+        html="/workarea/local/shared/"+ environ['USERNAME'] + "/notebooks_exports/{folder}/{variant}",
+        notebook=lambda wildcards: f"{wildcards.model.capitalize()}.ipynb"
+    message: "training {wildcards.model} model (variant {wildcards.variant}) on {wildcards.folder} folder"
+    
+    run:
+        environ.update({key: collection[wildcards.model][inverse_map['/'+wildcards.folder]][key] for key in env_keys})
+        shell("jupyter nbconvert --to HTML --execute {params.notebook} --ExecutePreprocessor.timeout=-1 \
+                    --ExecutePreprocessor.kernel_name=LHCb --no-input --allow-errors --output-dir {params.html}")
+        #shell("touch {output}")
+
+rule train_model:
+    input:
+        notebook = lambda wildcards: f"{wildcards.model.capitalize()}.ipynb"
+    output:
+        modelpath_wildcards
+    params:
+        html="/workarea/local/shared/"+ environ['USERNAME'] + "/notebooks_exports/{folder}"
+    message: "executing {input.notebook} to train {wildcards.model} model on {wildcards.folder} folder"
+    
+    run:
+        environ.update({key: collection[wildcards.model][inverse_map['/'+wildcards.folder]][key] for key in env_keys})
+        shell("jupyter nbconvert --to HTML --execute {input.notebook} --ExecutePreprocessor.timeout=-1 \
+                    --ExecutePreprocessor.kernel_name=LHCb --no-input --allow-errors --output-dir {params.html}")
+        #shell("touch {output}")

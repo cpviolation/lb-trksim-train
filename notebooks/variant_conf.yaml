@@ -1,5 +1,0 @@
-training_folder: 
-    j100: "/j100"
-    2016MU: "/2016MU/10134000"
-model_variants:
-    j100: ["v1"]
