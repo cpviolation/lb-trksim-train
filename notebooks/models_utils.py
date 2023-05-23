@@ -200,7 +200,7 @@ def DisplayMD(source):
     # Display styled DataFrame as Markdown
     display(Markdown(styled_df.to_html()))
 
-def GetTrainFolder(info,key:str):
+def GetTrainFolder(info,model:str,key:str):
     """read config file with models training dataset information"""
     # load configuration file
     with open(info, 'r') as file:
@@ -211,6 +211,7 @@ def GetTrainFolder(info,key:str):
         else:
             raise Exception("Unknown file format")
     # return path
+ #   return train_conf['training_folder'].get(model,{}).get(key,None)
     return train_conf['training_folder'].get(key,None)
     
 def reljoin(*paths):

@@ -13,7 +13,7 @@ Barplots shows different model's number side by side, while histograms of number
 The first set of plots shows the pulls between the models predictions and the true distribution.
 The Kolmogorov-Smirnov distributions are evaluated for each models separately, and then the distribution of KS in different bins is shown for each model (resulting in a bit overcrowded plots)
 
-### Notebook: Covariance validaion
+### Notebook: Covariance validation
 The first set of plots shows the pulls between the models predictions and the true distribution.
 The Kolmogorov-Smirnov distributions are evaluated for each models separately, and then the distribution of KS in different bins is shown as difference between each model and a reference model, chosen by the *target dataset* variable.
 
