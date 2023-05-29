@@ -3,7 +3,61 @@ from yaml import safe_load
 import numpy as np
 from os import path,environ,walk
 from tensorflow.keras.models import load_model
+from tensorflow.keras.callbacks import Callback
+from tensorflow.keras.layers import Dense
 import matplotlib.pyplot as plt
+import pandas as pd
+from io import StringIO
+from IPython.display import Markdown, display
+
+import subprocess
+    
+def plot_weight_distributions(model,title=""):
+    dense_layers = [layer for layer in model.layers if isinstance(layer, Dense)]
+    cmap = plt.get_cmap('coolwarm')
+    colors = cmap(np.linspace(0, 1, len(dense_layers)))
+    fig,axes = plt.subplots(1,2,figsize=(16,5))
+ 
+    # Setting the background color of the plot
+    for ax in axes:
+        ax.set_facecolor("darkgrey")
+    
+    for i, layer in enumerate(dense_layers):
+        weights = layer.get_weights()[0].flatten()  # Flatten the weights
+        bias    = layer.get_weights()[1]
+        wlabel = f"{layer.__class__.__name__} {i+1}, #w: {weights.shape[0]}"
+        blabel = f"{layer.__class__.__name__} {i+1}, #b: {bias.shape[0]}"
+        axes[0].hist(weights, density=True, bins="auto", histtype='step', color=colors[i], label=wlabel)
+        axes[1].hist(bias, density=True, bins="auto", histtype='step', color=colors[i], label=blabel, facecolor='black')
+
+    if title != "":
+        axes[0].set_title(title+" - weights")
+        axes[1].set_title(title+" - bias")
+    for ax in axes:
+        ax.set_xlim(-2,2)
+        ax.set_xlabel('Weight Value')
+        ax.set_ylabel('Counts')
+        ax.legend()
+    plt.show()
+    
+class CustomCallback(Callback):
+    def __init__(self, epoch_check=0):
+        """ Save params in constructor
+        """
+        self.epoch_check = epoch_check
+        
+    def on_epoch_begin(self, epoch, logs=None):
+        if epoch==0:
+            title = f"Before epoch {epoch+1}"
+            plot_weight_distributions(self.model,title)
+    def on_epoch_end(self, epoch, logs=None):
+        #batcmd="nvidia-smi --query-gpu=utilization.gpu --format=csv"
+        #result = subprocess.check_output(batcmd, shell=True,text=True)
+        #print("GPU: ",result.split('\n')[1])
+        if (epoch+1)%self.epoch_check==0:
+            title = f"End epoch {epoch+1}"
+            plot_weight_distributions(self.model,title)
+
 
 def GetModelVariantList(model_dir:str):
     """return list of existing model variants"""
@@ -123,6 +177,9 @@ def MakeMD(props:dict,head="Head",mdfile=None,ret=False,maxdepth=None):
 def plotHistory(variants: dict, metrics=["loss"]):
     """Plot metrics of different variants"""
     
+    if isinstance(metrics,str):
+        metrics = [metrics]
+        
     for m in metrics:
         # print figure for each metrics
         fig,axes = plt.subplots(2,1,figsize=(7,7))
@@ -170,9 +227,7 @@ def LoadModelsInfos(model_dir:str):
     
     return models
 
-import pandas as pd
-from io import StringIO
-from IPython.display import Markdown, display
+
 
 def DisplayMD(source):
     
