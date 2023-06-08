@@ -1,0 +1,198 @@
+
+# execute with: snakemake -s Snakefile-validate-deploy --forceall --resource gpu=1 (--latency-wait 60)
+# create DAG plot with: snakemake -s Snakefile-validate-deploy --forceall --dag | dot -Tpdf > dag.pdf
+
+from glob import glob
+from os import environ
+from pathlib import Path
+
+# dictionary holding the model's home directories and variant labels
+configfile: "variant_config.yaml"
+
+environ['HOME_DIR'      ] = "/mlinfn/shared/lamarr/" + environ['USERNAME']
+environ['DATA_STORAGE'  ] = "/mlinfn/minio/lhcb-data/anderlinil/LamarrBenderTrain"
+environ['MODEL_STORAGE' ] = environ['HOME_DIR'] + "/trained_models"
+environ['NB_EXPORT'     ] = "False"
+environ['FEATHER_FOLDER'] = environ['HOME_DIR'] + "/lb-trksim-train/notebooks/feather_folder"
+
+TRAIN_FOLDERS = ['/j100']#[path for path in config['training_folder'].values()]
+
+rule all:
+    input:
+        acceptance = expand("reports{train_path}/validate_acceptance.html",train_path=TRAIN_FOLDERS),
+        efficiency = expand("reports{train_path}/validate_efficiency.html",train_path=TRAIN_FOLDERS),
+        resolution = expand("reports{train_path}/validate_resolution.html",train_path=TRAIN_FOLDERS),
+        covariance = expand("reports{train_path}/validate_covariance.html",train_path=TRAIN_FOLDERS),
+        shared_obj = expand("exported{train_path}/generated.so"           ,train_path=TRAIN_FOLDERS)
+
+    output:
+        timestamp="reports/all.done"
+        
+    benchmark:
+        "benchmarks/all.txt"
+        
+    shell:
+        "touch {output.timestamp} "
+
+
+rule validate_acceptance:
+    input:
+        notebook ="Acceptance-validation.ipynb",
+        test_data= lambda wildcards: environ['FEATHER_FOLDER']+f"/{wildcards.train_path}/acceptance-test",
+        model_pb = lambda wildcards: environ['MODEL_STORAGE']+f"/{wildcards.train_path}/models/acceptance/saved_model.pb"
+        
+    log:
+        "reports/{train_path}/validate_acceptance.html"
+        
+    benchmark:
+        "benchmarks/{train_path}/validate_acceptance.txt"
+    
+    message:
+        "Validate Acceptance model trained on {wildcards.train_path}"
+
+    resources:
+        gpu=1
+
+    shell:
+        "TEST_DATA={input.test_data} "
+        "INPUT_MODEL={input.model_pb} "
+        "jupyter nbconvert --to html --execute "
+        "--ExecutePreprocessor.timeout=-1 "
+        "--ExecutePreprocessor.kernel_name=hep "
+        "--no-input --no-prompt --allow-errors  "
+        "{input.notebook} --output {log}"
+        
+
+rule validate_efficiency:
+    input:
+        notebook ="Efficiency-validation.ipynb",
+        test_data=lambda wildcards: environ['FEATHER_FOLDER']+f"/{wildcards.train_path}/efficiency-test",
+        model_pb =lambda wildcards: environ['MODEL_STORAGE']+f"/{wildcards.train_path}/models/efficiency/saved_model.pb"
+        
+    log:
+        "reports/{train_path}/validate_efficiency.html"
+        
+    benchmark:
+        "benchmarks/{train_path}/validate_efficiency.txt"
+        
+    message:
+        "Validate Efficiency model trained on {wildcards.train_path}"
+
+    resources:
+        gpu=1
+         
+    shell:
+        "TEST_DATA={input.test_data} "
+        "INPUT_MODEL={input.model_pb} "
+        "jupyter nbconvert --to html --execute "
+        "--ExecutePreprocessor.timeout=-1 "
+        "--ExecutePreprocessor.kernel_name=hep "
+        "--no-input --no-prompt --allow-errors  "
+        "{input.notebook} --output {log}"
+        
+rule validate_resolution:
+    input:
+        notebook ="Resolution-validation.ipynb",
+        test_data=lambda wildcards: environ['FEATHER_FOLDER']+f"/{wildcards.train_path}/resolution-test",
+        model_pb =lambda wildcards: environ['MODEL_STORAGE']+f"/{wildcards.train_path}/models/resolution/saved_model.pb",
+        preprocessing_x=lambda wildcards: environ['MODEL_STORAGE']+f"/{wildcards.train_path}/models/resolution/tX.pkl",
+        preprocessing_y=lambda wildcards: environ['MODEL_STORAGE']+f"/{wildcards.train_path}/models/resolution/tY.pkl",
+        
+    log:
+        "reports/{train_path}/validate_resolution.html"
+        
+    benchmark:
+        "benchmarks/{train_path}/validate_resolution.txt"
+
+    resources:
+        gpu=1
+         
+    shell:
+        "TEST_DATA={input.test_data} "
+        "INPUT_MODEL={input.model_pb} "
+        "RESOLUTION_PREPROCESSING_X={input.preprocessing_x} "
+        "RESOLUTION_PREPROCESSING_Y={input.preprocessing_y} "
+        "jupyter nbconvert --to html --execute "
+        "--ExecutePreprocessor.timeout=-1 "
+        "--ExecutePreprocessor.kernel_name=hep "
+        "--no-input --no-prompt --allow-errors  "
+        "{input.notebook} --output {log}"
+
+        
+rule validate_covariance:
+    input:
+        notebook="Covariance-validation.ipynb",
+        test_data=lambda wildcards: environ['FEATHER_FOLDER']+f"/{wildcards.train_path}/covariance-test",
+        model_pb =lambda wildcards: environ['MODEL_STORAGE']+f"/{wildcards.train_path}/models/covariance/saved_model.pb",
+        preprocessing_x=lambda wildcards: environ['MODEL_STORAGE']+f"/{wildcards.train_path}/models/covariance/tX.pkl",
+        preprocessing_y=lambda wildcards: environ['MODEL_STORAGE']+f"/{wildcards.train_path}/models/covariance/tY.pkl",
+        
+    log:
+        "reports/{train_path}/validate_covariance.html"
+        
+    benchmark:
+        "benchmarks/{train_path}/validate_covariance.txt"
+
+    message:
+        "Validate Covariance model trained on {wildcards.train_path}"
+
+    resources:
+        gpu=1
+         
+    shell:
+        "TEST_DATA={input.test_data} "
+        "INPUT_MODEL={input.model_pb} "
+        "COVARIANCE_PREPROCESSING_X={input.preprocessing_x} "
+        "COVARIANCE_PREPROCESSING_Y={input.preprocessing_y} "
+        "jupyter nbconvert --to html --execute "
+        "--ExecutePreprocessor.timeout=-1 "
+        "--ExecutePreprocessor.kernel_name=hep "
+        "--no-input --no-prompt --allow-errors  "
+        "{input.notebook} --output {log}"
+
+
+rule deploy:
+    input:
+        notebook="Deploy.ipynb",
+        acceptance_model= lambda wildcards: environ['MODEL_STORAGE' ]+f"/{wildcards.train_path}/models/acceptance/saved_model.pb",
+        acceptance_data = lambda wildcards: environ['FEATHER_FOLDER']+f"/{wildcards.train_path}/acceptance-validation",
+        efficiency_model= lambda wildcards: environ['MODEL_STORAGE' ]+f"/{wildcards.train_path}/models/efficiency/saved_model.pb",
+        efficiency_data = lambda wildcards: environ['FEATHER_FOLDER']+f"/{wildcards.train_path}/efficiency-validation",
+        resolution_model= lambda wildcards: environ['MODEL_STORAGE' ]+f"/{wildcards.train_path}/models/resolution/saved_model.pb",
+        resolution_data = lambda wildcards: environ['FEATHER_FOLDER']+f"/{wildcards.train_path}/resolution-validation",
+        covariance_model= lambda wildcards: environ['MODEL_STORAGE' ]+f"/{wildcards.train_path}/models/covariance/saved_model.pb",
+        covariance_data = lambda wildcards: environ['FEATHER_FOLDER']+f"/{wildcards.train_path}/covariance-validation"
+       
+    log:
+        "reports/{train_path}/deploy.html"
+        
+    benchmark:
+        "benchmarks/{train_path}/deploy.txt"
+    
+    message:
+        "Deploy models trained on {wildcards.train_path}"
+
+    output:
+        generated_c_file  = "exported/{train_path}/generated.C",
+        generated_library = "exported/{train_path}/generated.so"
+           
+    resources:
+        gpu=0
+    
+    shell:
+        "ACCEPTANCE_MODEL='{input.acceptance_model}' "
+        "EFFICIENCY_MODEL='{input.efficiency_model}' "
+        "RESOLUTION_MODEL='{input.resolution_model}' "
+        "COVARIANCE_MODEL='{input.covariance_model}' "
+        "ACCEPTANCE_TEST_DATA='{input.acceptance_data}' "
+        "EFFICIENCY_TEST_DATA='{input.efficiency_data}' "
+        "RESOLUTION_TEST_DATA='{input.resolution_data}' "
+        "COVARIANCE_REST_DATA='{input.covariance_data}' "
+        "GENERATED_C_FILE='{output.generated_c_file}' "
+        "GENERATED_LIBRARY='{output.generated_library}' "
+        "jupyter nbconvert --to html --execute "
+        "--ExecutePreprocessor.timeout=-1 "
+        "--ExecutePreprocessor.kernel_name=hep "
+        "--no-input --no-prompt   "
+        "{input.notebook} --output {log}"
+        
