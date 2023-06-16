@@ -1,13 +1,13 @@
-# Snakefile for training models and variants. default models are always retrained, while only the variants specified in the config file are trained (maybe change this in the future)
-
+# Snakefile for training models and variants.
 # prerequisite: preprocessing of all dataset
-# execute with: snakemake -s Snakefile-variants --resource gpu=1 (--latency-wait 60)
-# create DAG plot with: snakemake -s Snakefile-variants --forceall --dag | dot -Tpdf > dag.pdf
+# execute with: snakemake -s Snakefile-variants --forceall --resource gpu=1 (--latency-wait 60)
+# create DAG plot with: snakemake -s Snakefile-variants --dag | dot -Tpdf > dag-train.pdf
  
 # directive for correct order of execution
-ruleorder: train_model_variants > train_model
+ruleorder: validate_variant_model > validate_model > train_model > train_variant_model
+#ruleorder: validate_model > validate_variant_model > train_variant_model > train_model
 # dictionary holding the model's home directories and variant labels
-configfile: "variant_config.yaml" 
+configfile: "configs_db.yaml"
 
 from glob import glob
 from os import environ,path,makedirs
@@ -16,71 +16,91 @@ from pathlib import Path
 from json import load
 from pprint import pprint
 
+conf = config.get('conf',"default")
+environ['CONFIG_FILE'] = config['configurations'][conf]
+configfile: environ['CONFIG_FILE']
+
 TRAIN_DEFAULT_MODELS = True
 
 
 # load definition of variant models and training folders
 with open("Models_definitions.json") as mdl_file:
     models_def = load(mdl_file)
-        
+
+environ['DATA_STORAGE'] = "/mlinfn/minio/lhcb-data/anderlinil/LamarrBenderTrain"
+
 models_collection = dict() # collect the info identical for all the models
 
 for train_key in config['training_folder'].keys():
     models_collection[train_key] = dict()
     
-    models_collection[train_key]['HOME_DIR']             = "/workarea/local/shared/"+ environ['USERNAME']
+    models_collection[train_key]['HOME_DIR']             = "/mlinfn/shared/lamarr/"+ environ['USERNAME']
     models_collection[train_key]['TRAINING_DATA_FOLDER'] = config['training_folder'][train_key]
-    models_collection[train_key]['MODEL_STORAGE']        = models_collection[train_key]['HOME_DIR']+"/trained_models"+models_collection[train_key]['TRAINING_DATA_FOLDER']
+    models_collection[train_key]['MODEL_STORAGE']        = models_collection[train_key]['HOME_DIR'] + "/trained_models" + models_collection[train_key]['TRAINING_DATA_FOLDER']
     models_collection[train_key]['FEATHER_FOLDER']       = models_collection[train_key]['HOME_DIR'] + \
                                                            "/lb-trksim-train/notebooks/feather_folder" + \
                                                            models_collection[train_key]['TRAINING_DATA_FOLDER']
+# set empty dicts for missing config keys
+config.setdefault('model_defaults',{})
+config.setdefault('model_variants',{})
 
 collection = dict()   # collect all the infos of all the models
-models_paths = dict() # collect all the model paths
+#models_paths = dict() # collect all the model paths
+models2train = list(config['model_defaults'].keys())+list(config['model_variants'].keys()) # get models that should be trained, either default or variants
+models2train = list(set(models2train))
 
-for model in ["acceptance"]:
+html_outputs = [] # list of all converted notebook to be obtained
+# list of pairs of model,folder of the models to deploy
+models2deploy = [(model,config['training_folder'][train_key]) for model in config['model_defaults'].keys() for train_key in config['model_defaults'][model]]
+
+for model in models2train: 
     collection[model] = dict(variants=[])
     
-    models_paths[model] = dict() # create list of models and possible variants
     for train_key in config['training_folder'].keys():
         collection[model][train_key] = dict(models_collection[train_key])
         
         collection[model][train_key]['TRAIN_DATA'      ] = collection[model][train_key]['FEATHER_FOLDER']+f"/{model}-train"
         collection[model][train_key]['VALIDATION_DATA' ] = collection[model][train_key]['FEATHER_FOLDER']+f"/{model}-validation"
+        collection[model][train_key]['TEST_DATA'       ] = collection[model][train_key]['FEATHER_FOLDER']+f"/{model}-test"
         collection[model][train_key]['OUTPUT_MODEL'    ] = collection[model][train_key]['MODEL_STORAGE']+f"/models/{model}/saved_model.pb"
+        collection[model][train_key]['INPUT_MODEL'     ] = collection[model][train_key]['MODEL_STORAGE']+f"/models/{model}/saved_model.pb"
+        collection[model][train_key]['EXPORT_NOTEBOOK' ] = models_collection[train_key]['HOME_DIR'] + f"/notebooks_exports{config['training_folder'][train_key]}"
         collection[model][train_key]['MODEL_VARIANT'   ] = '' # default key is empty string
         collection[model][train_key]['MODEL_DEFINITION'] = models_def[model]['']
     
-        models_paths[model][train_key] = dict(model=models_collection[train_key]['MODEL_STORAGE']+f"/models/{model}/model_info.md")
-        # if present add variants models paths
-        if  len( config['model_variants'][model].get(train_key,[]) ) > 0:
-            models_paths[model][train_key]['variants'] = []
+        # add default model
+        if train_key in config['model_defaults'].get(model,[]):
+            html_outputs.append(f"{collection[model][train_key]['EXPORT_NOTEBOOK']}/{model.capitalize()}-validation.html") # add default model
+        
+        # add variant models
+        if len( config['model_variants'].get(model,{}).get(train_key,[]) ) > 0:
             for variant in config['model_variants'][model][train_key]:
-                models_paths[model][train_key]['variants'].append(models_collection[train_key]['MODEL_STORAGE']+f"/models/{model}/{variant}/model_info.md")
-
+                html_outputs.append(f"{collection[model][train_key]['EXPORT_NOTEBOOK']}/{model.capitalize()}_{variant}-validation.html")
+                
 # models paths with wildcards to parallelize training
-modelpath_wildcards   = "/workarea/local/shared/"+ environ['USERNAME'] + "/trained_models/{folder}/models/{model}/model_info.md"
-variantpath_wildcards = "/workarea/local/shared/"+ environ['USERNAME'] + "/trained_models/{folder}/models/{model}/{variant}/model_info.md"
+nb_htmlpath_wildcards    = "/mlinfn/shared/lamarr/"+ environ['USERNAME'] + "/notebooks_exports/{folder}/{nbname}"
+nbvar_htmlpath_wildcards = "/mlinfn/shared/lamarr/"+ environ['USERNAME'] + "/notebooks_exports/{folder}/{nbname}_{variant}"
+
+# list of training folders
+TRAIN_FOLDERS = [path for path in config['training_folder'].values()]
 
 # needed to access environ variables from train_folder and not from train_key
 inverse_map = {v: k for k, v in config['training_folder'].items()}
 
+# match model notebook with preprocessing notebook
+preprocessing_nb = dict(Acceptance="Preprocessing",Efficiency="Preprocessing",Resolution="Preprocessing-GANs",Covariance="Preprocessing-GANs")
+
 # environment variables used by the notebooks
 env_keys = ["HOME_DIR","TRAINING_DATA_FOLDER","MODEL_STORAGE","FEATHER_FOLDER", \
-            "TRAIN_DATA","VALIDATION_DATA","OUTPUT_MODEL","MODEL_VARIANT","MODEL_DEFINITION"]
+            "TRAIN_DATA","VALIDATION_DATA","TEST_DATA","OUTPUT_MODEL","INPUT_MODEL","MODEL_VARIANT","MODEL_DEFINITION"]
 
 #the export to html is done by snakemake
 environ['NB_EXPORT'] = "False"
-
-all_models = [] # list of all notebooks paths to be trained
-for model in models_paths.keys():
-    for train_key in models_paths[model].keys():
-        all_models.append(models_paths[model][train_key]['model'])                  # default model
-        all_models = all_models + models_paths[model][train_key].get('variants',[]) # possible variants
-
+                
 rule all:
     input:
-        all_models
+        validations = html_outputs,
+        #deploy = expand("reports{folder}/Deploy.html",folder=TRAIN_FOLDERS)
     output:
         "touched/all.done"
     message: "Trained these models: {input}"
@@ -88,35 +108,155 @@ rule all:
     run:
         shell("touch {output}")
         
-rule train_model_variants:
+
+rule preprocessing:
     input:
-        modelpath_wildcards
+        notebook="Preprocessing.ipynb",
+        data_files= lambda wildcards: glob(environ['DATA_STORAGE']+f"/{wildcards.folder}/*.root")
+       
     output:
-        variantpath_wildcards
-    params:
-        html="/workarea/local/shared/"+ environ['USERNAME'] + "/notebooks_exports/{folder}/{variant}",
-        notebook=lambda wildcards: f"{wildcards.model.capitalize()}.ipynb"
-    message: "Training {wildcards.model} model (variant {wildcards.variant}) on {wildcards.folder} folder"
+        "reports/{folder}/Preprocessing.html",
+        
+    message:
+        "Preprocessing data in {wildcards.folder} for acceptance and efficiency models"
+        
+    resources:
+        gpu=0
+   
+    run:
+        makedirs(output.html,exist_ok=True) # create if not exists
+        # update environ variables
+        environ.update({key: collection[wildcards.model][inverse_map['/'+wildcards.folder]][key] for key in env_keys})
+        environ['INPUT_FILES'] = input.data_files
+        for m in ['acceptance','efficiency']:
+            environ[f"{m.upper()}_PREPROCESSING"]   = environ['MODEL_STORAGE']+f"/{wildcards.folder}/models/{m}/tX.pkl"
+            for f in ['train','test','validation']:
+                environ[f"{m.upper()}_{f.upper()}"] = directory(environ['FEATHER_FOLDER']+f"/{wildcards.folder}/{m}-{f}")
+        
+        shell("jupyter nbconvert --to html --execute --ExecutePreprocessor.timeout=-1 --ExecutePreprocessor.kernel_name=hep --no-input --no-prompt {input.notebook} --output {output} ")
+        #shell("touch {output.html}")
+
+
+rule preprocessing_gans:
+    input:
+        notebook="Preprocessing-GANs.ipynb",
+        data_files= lambda wildcards: glob(environ['DATA_STORAGE']+f"/{wildcards.folder}/*.root")
+    
+    output:
+        "reports/{folder}/Preprocessing-GANs.html",
+
+    message:
+        "Preprocessing data in {wildcards.folder} for GAN resolution and covariance models"
+        
+    resources:
+        gpu=0
     
     run:
-        makedirs(params.html,exist_ok=True) # create if not exists
+        makedirs(output.html,exist_ok=True) # create if not exists
+        # update environ variables
         environ.update({key: collection[wildcards.model][inverse_map['/'+wildcards.folder]][key] for key in env_keys})
-        shell("jupyter nbconvert --to HTML --execute {params.notebook} --ExecutePreprocessor.timeout=-1 --ExecutePreprocessor.kernel_name=LHCb --no-input --allow-errors --output-dir {params.html}")
-        #shell("touch {output}")
+        environ['INPUT_FILES'] = input.data_files
+        for m in ['resolution','covariance']:
+            environ[f"{m.upper()}_PREPROCESSING_X"]   = environ['MODEL_STORAGE']+f"/{wildcards.folder}/models/{m}/tX.pkl"
+            environ[f"{m.upper()}_PREPROCESSING_Y"]   = environ['MODEL_STORAGE']+f"/{wildcards.folder}/models/{m}/tY.pkl"
+            for f in ['train','test','validation']:
+                environ[f"{m.upper()}_{f.upper()}"] = directory(environ['FEATHER_FOLDER']+f"/{wildcards.folder}/{m}-{f}")
+        
+        shell("jupyter nbconvert --to html --execute --ExecutePreprocessor.timeout=-1 --ExecutePreprocessor.kernel_name=hep --no-input --no-prompt   {input.notebook} --output {log}")
+        #shell("touch {output.html}")
+
+        
+rule train_variant_model:
+    input:
+        preprocessing = lambda wildcards: "reports/{folder}/"+f"{preprocessing_nb[wildcards.nbname]}.html",
+        notebook      = lambda wildcards: f"{wildcards.nbname}.ipynb"
+    output:
+        html = nbvar_htmlpath_wildcards+".html"
+    benchmark:
+        "benchmarks/{folder}/{nbname}_{variant}.txt"
+    resources:
+        gpu=1
+    message: "Training {wildcards.nbname} model (variant {wildcards.variant}) on {wildcards.folder} folder"
+    
+    run:
+        makedirs(output.html,exist_ok=True) # create if not exists
+        environ.update({key: collection[wildcards.model][inverse_map['/'+wildcards.folder]][key] for key in env_keys})
+        
+        shell("jupyter nbconvert --to HTML --execute {input.notebook} --ExecutePreprocessor.timeout=-1 --ExecutePreprocessor.kernel_name=hep --no-input --allow-errors --output {output.html}")
+        #shell("touch {output.html}")
         
 
 rule train_model:
     input:
-        notebook = lambda wildcards: f"{wildcards.model.capitalize()}.ipynb"
+        preprocessing = lambda wildcards: "reports/{folder}/"+f"{preprocessing_nb[wildcards.nbname]}.html",
+        notebook      = lambda wildcards: f"{wildcards.nbname}.ipynb"
     output:
-        modelpath_wildcards
-    params:
-        html="/workarea/local/shared/"+ environ['USERNAME'] + "/notebooks_exports/{folder}"
-    message: "Executing {input.notebook} to train {wildcards.model} model on {wildcards.folder} folder"
+        html = nb_htmlpath_wildcards+".html"
+    benchmark:
+        "benchmarks/{folder}/{nbname}.txt"
+    resources:
+        gpu=1
+    message: "Executing {input.notebook} to train {wildcards.nbname} model on {wildcards.folder} folder"
     
     run:
-        makedirs(params.html,exist_ok=True) # create if not exists
+        makedirs(output.html,exist_ok=True) # create if not exists
         environ.update({key: collection[wildcards.model][inverse_map['/'+wildcards.folder]][key] for key in env_keys})
-        shell("jupyter nbconvert --to HTML --execute {input.notebook} --ExecutePreprocessor.timeout=-1  --ExecutePreprocessor.kernel_name=LHCb --no-input --allow-errors --output-dir {params.html}" )
-        #shell("touch {output}")
         
+        shell("jupyter nbconvert --to HTML --execute {input.notebook} --ExecutePreprocessor.timeout=-1  --ExecutePreprocessor.kernel_name=hep --no-input --allow-errors --output {output.html}" )
+        #shell("touch {output.html}")
+        
+        
+rule validate_variant_model:
+    input:
+        html = nbvar_htmlpath_wildcards+".html"
+    output:
+        html = nbvar_htmlpath_wildcards+"-validation.html"
+    params:
+        notebook = lambda wildcards: f"{wildcards.nbname}-validation.ipynb"
+    resources:
+        gpu=1
+    message:
+        "Validate {wildcards.nbname} variant model trained on {wildcards.folder} folder"
+    
+    run:
+        makedirs(path.dirname(output.html),exist_ok=True) # create if not exists
+        environ.update({key: collection[wildcards.model][inverse_map['/'+wildcards.folder]][key] for key in env_keys})
+        
+        shell("jupyter nbconvert --to HTML --execute {nbname}.ipynb --ExecutePreprocessor.timeout=-1  --ExecutePreprocessor.kernel_name=hep --no-input --allow-errors --output {output.html}" )
+        #shell("touch {output.html}")
+        
+rule validate_model:
+    input:
+        html = nb_htmlpath_wildcards+".html"
+    output:
+        html = nb_htmlpath_wildcards+"-validation.html"
+    params:
+        notebook = lambda wildcards: f"{wildcards.nbname}-validation.ipynb"
+    resources:
+        gpu=1
+    message:
+        "Validate {wildcards.nbname} model trained on {wildcards.folder} folder"
+    
+    run:
+        makedirs(path.dirname(output.html),exist_ok=True) # create if not exists
+        environ.update({key: collection[wildcards.model][inverse_map['/'+wildcards.folder]][key] for key in env_keys})
+        
+        shell("jupyter nbconvert --to HTML --execute {nbname}.ipynb --ExecutePreprocessor.timeout=-1  --ExecutePreprocessor.kernel_name=hep --no-input --allow-errors --output {output.html}" )
+        #shell("touch {output.html}")
+
+rule deploy_model:
+    input:
+        html = lambda wildcards: [nb_htmlpath_wildcards.replace("/{folder}",folder).replace("{nbname}",model.capitalize())+"-validation.html" for model,folder in models2deploy]
+    output:
+        html= "reports/{folder}/Deploy.html"
+    resources:
+        gpu=0
+    message:
+        "Deploy these validated models: {input.html}"
+    
+    run:
+        makedirs(path.dirname(output.html),exist_ok=True) # create if not exists
+        environ.update({key: collection[wildcards.model][inverse_map['/'+wildcards.folder]][key] for key in env_keys})
+        
+        #shell("jupyter nbconvert --to HTML --execute {nbname}.ipynb --ExecutePreprocessor.timeout=-1  --ExecutePreprocessor.kernel_name=hep --no-input --allow-errors --output {output.html}" )
+        shell("touch {output.html}")

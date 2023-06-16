@@ -1,0 +1,7 @@
+training_folder: 
+    j100: "/j100"
+model_defaults: 
+    efficiency: ["j100"]
+    acceptance: ["j100"]
+    resolution: ["j100"]
+    covariance: ["j100"]

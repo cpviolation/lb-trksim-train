@@ -4,7 +4,11 @@ from glob import glob
 from os import environ
 from pathlib import Path
 
-configfile: "train_conf.yaml"    # dictionary holding the model's home directories
+configfile: "configs_db.yaml"
+conf = config.get('conf',"default")
+environ['CONFIG_FILE'] = config['configurations'][conf]
+configfile: environ['CONFIG_FILE']
+
 tset = config.get('tset',"j100") # target sample on which apply the different models
 
 environ['TARGET_TRAIN_DATASET'] = tset 
@@ -13,9 +17,9 @@ models_collection = dict()
 for train_key in config['training_folder'].keys():
     models_collection[train_key] = dict()
     
-    models_collection[train_key]['HOME_DIR']             = "/workarea/local/shared/"+ environ['USERNAME']
+    models_collection[train_key]['HOME_DIR']             = "/mlinfn/shared/lamarr/"+ environ['USERNAME']
     models_collection[train_key]['TRAINING_DATA_FOLDER'] = config['training_folder'][train_key]
-    models_collection[train_key]['MODEL_STORAGE']        = models_collection[train_key]['HOME_DIR']+"/trained_models"+models_collection[train_key]['TRAINING_DATA_FOLDER']
+    models_collection[train_key]['MODEL_STORAGE']        = models_collection[train_key]['HOME_DIR'] + "/trained_models" + models_collection[train_key]['TRAINING_DATA_FOLDER']
     models_collection[train_key]['FEATHER_FOLDER']       = models_collection[train_key]['HOME_DIR'] + \
                                                            "/lb-trksim-train/notebooks/feather_folder" + \
                                                            models_collection[train_key]['TRAINING_DATA_FOLDER']
@@ -36,8 +40,9 @@ rule all:
         "benchmarks"+models_collection[tset]['TRAINING_DATA_FOLDER']+"/all_compared.txt"
         
     shell:
-        "touch {output.timestamp}"
+        "touch {output.timestamp} "
   
+
 rule compare_acceptance:
     input:
         "Acceptance-validation-comparison.ipynb"

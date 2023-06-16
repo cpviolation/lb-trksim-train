@@ -1,0 +1,15 @@
+training_folder: 
+    j100: "/j100"
+    2016MU: "/2016MU/10134000"
+model_defaults: 
+    efficiency: ["j100","2016MU"]
+    acceptance: ["j100","2016MU"]
+    resolution: ["j100","2016MU"]
+    covariance: ["j100","2016MU"]
+model_variants:
+    efficiency:
+        j100: ["v1"]
+        2016MU: ["v1"]
+    acceptance:
+        j100: ["v1"]
+        2016MU: ["v1"]

@@ -86,8 +86,10 @@ def GetModelProperties(model=None,history=None):
     info2save = dict(model={})
     
     if history is not None:
-        model                = history.model
-        info2save['history'] = history.history
+        if history.model != None:
+            model                = history.model
+        if history.history != None:
+            info2save['history'] = history.history
     
     info2save['model']['layers'] = dict()      # store layer config
     info2save['model']['layers_type'] = dict() # count layer types
@@ -107,7 +109,8 @@ def GetModelProperties(model=None,history=None):
             info2save['model']['layers_type'][L_type] = 1
             
     info2save['model']['N_layers'] = len(info2save['model']['layers'])
-    info2save['model']['optimizer'] = Stringfy(model.optimizer.get_config())
+    if model.optimizer != None:
+        info2save['model']['optimizer'] = Stringfy(model.optimizer.get_config())
     return info2save
 
 def diffDict(dictA : dict, dictB : dict):

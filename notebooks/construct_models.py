@@ -95,7 +95,7 @@ def CovarianceGANgenerator(layers=1,X_shape=None,y_shape=None):
 
     x = tf.keras.layers.Concatenate(axis=1)((g_input, random))
     x = tf.keras.layers.Dense(**g_dense_cfg)(x)
-    for i in range(g_nLayers):
+    for i in range(layers):
         x_ = tf.keras.layers.Dense(**g_dense_cfg)(x)
         x = x + x_
 
@@ -107,10 +107,10 @@ def CovarianceGANgenerator(layers=1,X_shape=None,y_shape=None):
         
 def CovarianceGANdiscriminator(layers=1,X_shape=None,y_shape=None):
     """basic NN for Resolution discriminator model"""
-    d_input_ref_x = tf.keras.layers.Input(shape=[X.shape[1]], name="X_ref")
+    d_input_ref_x = tf.keras.layers.Input(shape=[X_shape[1]], name="X_ref")
 
-    d_input_ref_y = tf.keras.layers.Input(shape=[y.shape[1]], name="Y_ref")
-    d_input_gen_y = tf.keras.layers.Input(shape=[y.shape[1]], name="Y_gen")
+    d_input_ref_y = tf.keras.layers.Input(shape=[y_shape[1]], name="Y_ref")
+    d_input_gen_y = tf.keras.layers.Input(shape=[y_shape[1]], name="Y_gen")
 
     d_input_y = tf.keras.layers.Concatenate(axis=0, name="Y")((d_input_ref_y, d_input_gen_y))
     d_input_x = tf.keras.layers.Concatenate(axis=0, name="X")((d_input_ref_x, d_input_ref_x))
@@ -120,7 +120,7 @@ def CovarianceGANdiscriminator(layers=1,X_shape=None,y_shape=None):
     d_dense_cfg=dict(units=128, activation='tanh', kernel_initializer='he_normal', kernel_regularizer=tf.keras.regularizers.L2(1e-2))
 
     x = tf.keras.layers.Dense(**d_dense_cfg)(d_input)
-    for i in range(d_nLayers):
+    for i in range(layers):
         x = tf.keras.layers.Dense(**d_dense_cfg)(x)
         #x = x + x_
 
