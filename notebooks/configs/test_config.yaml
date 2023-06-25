@@ -13,3 +13,8 @@ model_variants:
     acceptance:
         j100: ["v1"]
         2016MU: ["v1"]
+deploy_models: 
+    efficiency: ["j100","2016MU"]
+    acceptance: ["j100","2016MU"]
+    resolution: ["j100","2016MU"]
+    covariance: ["j100","2016MU"]

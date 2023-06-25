@@ -17,7 +17,10 @@ from json import load
 from pprint import pprint
 
 conf = config.get('conf',"default")
-environ['CONFIG_FILE'] = config['configurations'][conf]
+if "yaml" in conf:
+    environ['CONFIG_FILE'] = conf
+else:
+    environ['CONFIG_FILE'] = config['configurations'][conf]
 configfile: environ['CONFIG_FILE']
 
 TRAIN_DEFAULT_MODELS = True
@@ -51,7 +54,9 @@ models2train = list(set(models2train))
 
 html_outputs = [] # list of all converted notebook to be obtained
 # list of pairs of model,folder of the models to deploy
-models2deploy = [(model,config['training_folder'][train_key]) for model in config['model_defaults'].keys() for train_key in config['model_defaults'][model]]
+config.setdefault("deploy_models",{})
+models2deploy = [(model,config['training_folder'][train_key]) for model in config['deploy_models'].keys() for train_key in config['deploy_models'][model]]
+# NEED TO FINALIZE ORGANIZATION FOR DEPLOY SUBSET OF MODELS IN DIFFERENT TRAINING FOLDERS
 
 for model in models2train: 
     collection[model] = dict(variants=[])
@@ -100,7 +105,7 @@ environ['NB_EXPORT'] = "False"
 rule all:
     input:
         validations = html_outputs,
-        #deploy = expand("reports{folder}/Deploy.html",folder=TRAIN_FOLDERS)
+        deploy = expand("reports{folder}/Deploy.html",folder=[folder for _,folder in models2deploy])
     output:
         "touched/all.done"
     message: "Trained these models: {input}"
@@ -115,7 +120,7 @@ rule preprocessing:
         data_files= lambda wildcards: glob(environ['DATA_STORAGE']+f"/{wildcards.folder}/*.root")
        
     output:
-        "reports/{folder}/Preprocessing.html",
+        html="reports/{folder}/Preprocessing.html",
         
     message:
         "Preprocessing data in {wildcards.folder} for acceptance and efficiency models"
@@ -124,16 +129,17 @@ rule preprocessing:
         gpu=0
    
     run:
-        makedirs(output.html,exist_ok=True) # create if not exists
+        makedirs(path.dirname(output.html),exist_ok=True) # create if not exists
         # update environ variables
-        environ.update({key: collection[wildcards.model][inverse_map['/'+wildcards.folder]][key] for key in env_keys})
-        environ['INPUT_FILES'] = input.data_files
+        local_keys = ["HOME_DIR","TRAINING_DATA_FOLDER","MODEL_STORAGE","FEATHER_FOLDER"]
+        environ.update({key: models_collection[inverse_map['/'+wildcards.folder]][key] for key in local_keys})
+        environ['INPUT_FILES'] = " ".join(input.data_files)
         for m in ['acceptance','efficiency']:
             environ[f"{m.upper()}_PREPROCESSING"]   = environ['MODEL_STORAGE']+f"/{wildcards.folder}/models/{m}/tX.pkl"
             for f in ['train','test','validation']:
-                environ[f"{m.upper()}_{f.upper()}"] = directory(environ['FEATHER_FOLDER']+f"/{wildcards.folder}/{m}-{f}")
+                environ[f"{m.upper()}_{f.upper()}"] = environ['FEATHER_FOLDER']+f"/{wildcards.folder}/{m}-{f}"
         
-        shell("jupyter nbconvert --to html --execute --ExecutePreprocessor.timeout=-1 --ExecutePreprocessor.kernel_name=hep --no-input --no-prompt {input.notebook} --output {output} ")
+        shell("jupyter nbconvert --to html --execute --ExecutePreprocessor.timeout=-1 --ExecutePreprocessor.kernel_name=hep --no-input --no-prompt {input.notebook} --output {output.html} ")
         #shell("touch {output.html}")
 
 
@@ -143,7 +149,7 @@ rule preprocessing_gans:
         data_files= lambda wildcards: glob(environ['DATA_STORAGE']+f"/{wildcards.folder}/*.root")
     
     output:
-        "reports/{folder}/Preprocessing-GANs.html",
+        html="reports/{folder}/Preprocessing-GANs.html",
 
     message:
         "Preprocessing data in {wildcards.folder} for GAN resolution and covariance models"
@@ -152,17 +158,18 @@ rule preprocessing_gans:
         gpu=0
     
     run:
-        makedirs(output.html,exist_ok=True) # create if not exists
+        makedirs(path.dirname(output.html),exist_ok=True) # create if not exists
         # update environ variables
-        environ.update({key: collection[wildcards.model][inverse_map['/'+wildcards.folder]][key] for key in env_keys})
-        environ['INPUT_FILES'] = input.data_files
+        local_keys = ["HOME_DIR","TRAINING_DATA_FOLDER","MODEL_STORAGE","FEATHER_FOLDER"]
+        environ.update({key: models_collection[inverse_map['/'+wildcards.folder]][key] for key in local_keys})
+        environ['INPUT_FILES'] = " ".join(input.data_files)
         for m in ['resolution','covariance']:
             environ[f"{m.upper()}_PREPROCESSING_X"]   = environ['MODEL_STORAGE']+f"/{wildcards.folder}/models/{m}/tX.pkl"
             environ[f"{m.upper()}_PREPROCESSING_Y"]   = environ['MODEL_STORAGE']+f"/{wildcards.folder}/models/{m}/tY.pkl"
             for f in ['train','test','validation']:
-                environ[f"{m.upper()}_{f.upper()}"] = directory(environ['FEATHER_FOLDER']+f"/{wildcards.folder}/{m}-{f}")
+                environ[f"{m.upper()}_{f.upper()}"] = environ['FEATHER_FOLDER']+f"/{wildcards.folder}/{m}-{f}"
         
-        shell("jupyter nbconvert --to html --execute --ExecutePreprocessor.timeout=-1 --ExecutePreprocessor.kernel_name=hep --no-input --no-prompt   {input.notebook} --output {log}")
+        shell("jupyter nbconvert --to html --execute --ExecutePreprocessor.timeout=-1 --ExecutePreprocessor.kernel_name=hep --no-input --no-prompt   {input.notebook} --output {output.html}")
         #shell("touch {output.html}")
 
         
@@ -179,8 +186,8 @@ rule train_variant_model:
     message: "Training {wildcards.nbname} model (variant {wildcards.variant}) on {wildcards.folder} folder"
     
     run:
-        makedirs(output.html,exist_ok=True) # create if not exists
-        environ.update({key: collection[wildcards.model][inverse_map['/'+wildcards.folder]][key] for key in env_keys})
+        makedirs(path.dirname(output.html),exist_ok=True) # create if not exists
+        environ.update({key: collection[wildcards.nbname.lower()][inverse_map['/'+wildcards.folder]][key] for key in env_keys})
         
         shell("jupyter nbconvert --to HTML --execute {input.notebook} --ExecutePreprocessor.timeout=-1 --ExecutePreprocessor.kernel_name=hep --no-input --allow-errors --output {output.html}")
         #shell("touch {output.html}")
@@ -199,8 +206,8 @@ rule train_model:
     message: "Executing {input.notebook} to train {wildcards.nbname} model on {wildcards.folder} folder"
     
     run:
-        makedirs(output.html,exist_ok=True) # create if not exists
-        environ.update({key: collection[wildcards.model][inverse_map['/'+wildcards.folder]][key] for key in env_keys})
+        makedirs(path.dirname(output.html),exist_ok=True) # create if not exists
+        environ.update({key: collection[wildcards.nbname.lower()][inverse_map['/'+wildcards.folder]][key] for key in env_keys})
         
         shell("jupyter nbconvert --to HTML --execute {input.notebook} --ExecutePreprocessor.timeout=-1  --ExecutePreprocessor.kernel_name=hep --no-input --allow-errors --output {output.html}" )
         #shell("touch {output.html}")
@@ -220,9 +227,9 @@ rule validate_variant_model:
     
     run:
         makedirs(path.dirname(output.html),exist_ok=True) # create if not exists
-        environ.update({key: collection[wildcards.model][inverse_map['/'+wildcards.folder]][key] for key in env_keys})
+        environ.update({key: collection[wildcards.nbname.lower()][inverse_map['/'+wildcards.folder]][key] for key in env_keys})
         
-        shell("jupyter nbconvert --to HTML --execute {nbname}.ipynb --ExecutePreprocessor.timeout=-1  --ExecutePreprocessor.kernel_name=hep --no-input --allow-errors --output {output.html}" )
+        shell("jupyter nbconvert --to HTML --execute {params.notebook} --ExecutePreprocessor.timeout=-1  --ExecutePreprocessor.kernel_name=hep --no-input --allow-errors --output {output.html}" )
         #shell("touch {output.html}")
         
 rule validate_model:
@@ -239,16 +246,16 @@ rule validate_model:
     
     run:
         makedirs(path.dirname(output.html),exist_ok=True) # create if not exists
-        environ.update({key: collection[wildcards.model][inverse_map['/'+wildcards.folder]][key] for key in env_keys})
+        environ.update({key: collection[wildcards.nbname.lower()][inverse_map['/'+wildcards.folder]][key] for key in env_keys})
         
-        shell("jupyter nbconvert --to HTML --execute {nbname}.ipynb --ExecutePreprocessor.timeout=-1  --ExecutePreprocessor.kernel_name=hep --no-input --allow-errors --output {output.html}" )
-        #shell("touch {output.html}")
+        shell("jupyter nbconvert --to HTML --execute {params.notebook} --ExecutePreprocessor.timeout=-1  --ExecutePreprocessor.kernel_name=hep --no-input --allow-errors --output {output.html}" )
+        shell("touch {output.html}")
 
 rule deploy_model:
     input:
-        html = lambda wildcards: [nb_htmlpath_wildcards.replace("/{folder}",folder).replace("{nbname}",model.capitalize())+"-validation.html" for model,folder in models2deploy]
+        html = lambda wildcards: [nb_htmlpath_wildcards.replace("/{folder}","{folder}").replace("{nbname}",model.capitalize())+"-validation.html" for model,folder in models2deploy]
     output:
-        html= "reports/{folder}/Deploy.html"
+        html= "reports{folder}/Deploy.html"
     resources:
         gpu=0
     message:
@@ -256,7 +263,12 @@ rule deploy_model:
     
     run:
         makedirs(path.dirname(output.html),exist_ok=True) # create if not exists
-        environ.update({key: collection[wildcards.model][inverse_map['/'+wildcards.folder]][key] for key in env_keys})
+        local_keys = ["HOME_DIR","TRAINING_DATA_FOLDER","MODEL_STORAGE","FEATHER_FOLDER"]
+        environ.update({key: models_collection[inverse_map[wildcards.folder]][key] for key in local_keys})
+        environ['GENERATED_C_FILE'] = "exported"+environ['TRAINING_DATA_FOLDER']+"/generated.C"
+        for m in ['acceptance','efficiency','resolution','covariance']:
+            environ[f"{m.upper()}_MODEL"]     = environ['MODEL_STORAGE']+f"/models/{m}/saved_model.pb"
+            environ[f"{m.upper()}_TEST_DATA"] = environ['FEATHER_FOLDER']+f"/{m}-validation"
         
-        #shell("jupyter nbconvert --to HTML --execute {nbname}.ipynb --ExecutePreprocessor.timeout=-1  --ExecutePreprocessor.kernel_name=hep --no-input --allow-errors --output {output.html}" )
-        shell("touch {output.html}")
+        shell("jupyter nbconvert --to HTML --execute Deploy.ipynb --ExecutePreprocessor.timeout=-1  --ExecutePreprocessor.kernel_name=hep --no-input --allow-errors --output {output.html}" )
+        #shell("touch {output.html}")

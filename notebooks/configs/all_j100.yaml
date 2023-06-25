@@ -5,3 +5,8 @@ model_defaults:
     acceptance: ["j100"]
     resolution: ["j100"]
     covariance: ["j100"]
+deploy_models: 
+    efficiency: ["j100"]
+    acceptance: ["j100"]
+    resolution: ["j100"]
+    covariance: ["j100"]

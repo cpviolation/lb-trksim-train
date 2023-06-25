@@ -78,18 +78,15 @@ def Stringfy(element):
             element[k] = str(val)
     return element
 
-def GetModelProperties(model=None,history=None):
+def GetModelProperties(model=None,history=None,optimizer=None):
     """write the property of the model (and history) in the path"""
     
     assert (model is not None or history is not None), "either model or history must be given"
     
     info2save = dict(model={})
     
-    if history is not None:
-        if history.model != None:
-            model                = history.model
-        if history.history != None:
-            info2save['history'] = history.history
+    if history != None:
+        info2save['history'] = history
     
     info2save['model']['layers'] = dict()      # store layer config
     info2save['model']['layers_type'] = dict() # count layer types
@@ -111,6 +108,8 @@ def GetModelProperties(model=None,history=None):
     info2save['model']['N_layers'] = len(info2save['model']['layers'])
     if model.optimizer != None:
         info2save['model']['optimizer'] = Stringfy(model.optimizer.get_config())
+    elif optimizer != None:
+        info2save['model']['optimizer'] = Stringfy(optimizer.get_config())
     return info2save
 
 def diffDict(dictA : dict, dictB : dict):
