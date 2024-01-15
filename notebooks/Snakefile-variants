@@ -1,6 +1,6 @@
 # Snakefile for training models and variants.
 # prerequisite: preprocessing of all dataset
-# execute with: snakemake -s Snakefile-variants --forceall --resource gpu=1 (--latency-wait 60)
+# execute with: snakemake -s Snakefile-variants --config conf=NN_variants --resource gpu=1 (--forceall)
 # create DAG plot with: snakemake -s Snakefile-variants --dag | dot -Tpdf > dag-train.pdf
  
 # directive for correct order of execution
@@ -135,9 +135,9 @@ rule preprocessing:
         environ.update({key: models_collection[inverse_map['/'+wildcards.folder]][key] for key in local_keys})
         environ['INPUT_FILES'] = " ".join(input.data_files)
         for m in ['acceptance','efficiency']:
-            environ[f"{m.upper()}_PREPROCESSING"]   = environ['MODEL_STORAGE']+f"/{wildcards.folder}/models/{m}/tX.pkl"
+            environ[f"{m.upper()}_PREPROCESSING"]   = environ['MODEL_STORAGE']+f"/models/{m}/tX.pkl"
             for f in ['train','test','validation']:
-                environ[f"{m.upper()}_{f.upper()}"] = environ['FEATHER_FOLDER']+f"/{wildcards.folder}/{m}-{f}"
+                environ[f"{m.upper()}_{f.upper()}"] = environ['FEATHER_FOLDER']+f"/{m}-{f}"
         
         shell("jupyter nbconvert --to html --execute --ExecutePreprocessor.timeout=-1 --ExecutePreprocessor.kernel_name=hep --no-input --no-prompt {input.notebook} --output {output.html} ")
         #shell("touch {output.html}")
@@ -164,10 +164,10 @@ rule preprocessing_gans:
         environ.update({key: models_collection[inverse_map['/'+wildcards.folder]][key] for key in local_keys})
         environ['INPUT_FILES'] = " ".join(input.data_files)
         for m in ['resolution','covariance']:
-            environ[f"{m.upper()}_PREPROCESSING_X"]   = environ['MODEL_STORAGE']+f"/{wildcards.folder}/models/{m}/tX.pkl"
-            environ[f"{m.upper()}_PREPROCESSING_Y"]   = environ['MODEL_STORAGE']+f"/{wildcards.folder}/models/{m}/tY.pkl"
+            environ[f"{m.upper()}_PREPROCESSING_X"]   = environ['MODEL_STORAGE']+f"/models/{m}/tX.pkl"
+            environ[f"{m.upper()}_PREPROCESSING_Y"]   = environ['MODEL_STORAGE']+f"/models/{m}/tY.pkl"
             for f in ['train','test','validation']:
-                environ[f"{m.upper()}_{f.upper()}"] = environ['FEATHER_FOLDER']+f"/{wildcards.folder}/{m}-{f}"
+                environ[f"{m.upper()}_{f.upper()}"] = environ['FEATHER_FOLDER']+f"/{m}-{f}"
         
         shell("jupyter nbconvert --to html --execute --ExecutePreprocessor.timeout=-1 --ExecutePreprocessor.kernel_name=hep --no-input --no-prompt   {input.notebook} --output {output.html}")
         #shell("touch {output.html}")

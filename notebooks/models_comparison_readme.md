@@ -21,7 +21,7 @@ The Kolmogorov-Smirnov distributions are evaluated for each models separately, a
 This section illustrates how to use a Snakefile to automate the execution of Jupyter notebooks in a reproducible and scalable manner.
 
 ### Running the Snakefile
-The snakefile `Snakefile_comparison` load a configuration YAML file (default name: `train_conf.yaml`) which should contain in a key named `training_folder`, the dictionary that identifies the different trained models home path.
+The snakefile `Snakefile_comparison` load a configuration YAML file (default name: `configs_db.yaml`) which contains a dictionary of different configurations of which model should be compared, each of them with a key named `training_folder`, the dictionary that identifies the different trained models home path.
 When the snakefile is execute, the user can specify a *target dataset*, on which apply the different models, and this is done by the definition of the `tset` key in the config file at the time of execution (or can be written in the config file itself):
  ```bash
  snakemake -s Snakefile_comparison --config tset=j100

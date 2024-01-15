@@ -1,4 +1,6 @@
-# execute with snakemake -S {filename} --config tset=j100 --resource gpu=1
+# execute with snakemake -S {filename} --config tset=j100 conf=default --resource gpu=1
+# ------------------------------------------------------------------------
+# 
 
 from glob import glob
 from os import environ

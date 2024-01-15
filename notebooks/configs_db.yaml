@@ -1,4 +1,6 @@
 configurations:
     default: "configs/all_j100.yaml"
-    NN_only: "configs/basic_j100.yaml"
+    100_NN_only: "configs/basic_j100.yaml"
+    NN_only: "configs/NN.yaml"
+    GANN_only: "configs/GANN.yaml"
     NN_variants: "configs/test_config.yaml"
