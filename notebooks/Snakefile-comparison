@@ -1,0 +1,122 @@
+# execute with snakemake -S {filename} --config tset=j100 conf=default --resource gpu=1
+# ------------------------------------------------------------------------
+# 
+
+from glob import glob
+from os import environ
+from pathlib import Path
+
+configfile: "configs_db.yaml"
+conf = config.get('conf',"default")
+environ['CONFIG_FILE'] = config['configurations'][conf]
+configfile: environ['CONFIG_FILE']
+
+tset = config.get('tset',"j100") # target sample on which apply the different models
+
+environ['TARGET_TRAIN_DATASET'] = tset 
+models_collection = dict()
+
+for train_key in config['training_folder'].keys():
+    models_collection[train_key] = dict()
+    
+    models_collection[train_key]['HOME_DIR']             = "/mlinfn/shared/lamarr/"+ environ['USERNAME']
+    models_collection[train_key]['TRAINING_DATA_FOLDER'] = config['training_folder'][train_key]
+    models_collection[train_key]['MODEL_STORAGE']        = models_collection[train_key]['HOME_DIR'] + "/trained_models" + models_collection[train_key]['TRAINING_DATA_FOLDER']
+    models_collection[train_key]['FEATHER_FOLDER']       = models_collection[train_key]['HOME_DIR'] + \
+                                                           "/lb-trksim-train/notebooks/feather_folder" + \
+                                                           models_collection[train_key]['TRAINING_DATA_FOLDER']
+    
+environ['NB_EXPORT'] = "False"
+
+rule all:
+    input:
+        acceptance="reports"+models_collection[tset]['TRAINING_DATA_FOLDER']+"/validate_acceptance_comparison.html",
+        efficiency="reports"+models_collection[tset]['TRAINING_DATA_FOLDER']+"/validate_efficiency_comparison.html",
+        resolution="reports"+models_collection[tset]['TRAINING_DATA_FOLDER']+"/validate_resolution_comparison.html",
+        covariance="reports"+models_collection[tset]['TRAINING_DATA_FOLDER']+"/validate_covariance_comparison.html",
+        
+    output:
+        timestamp="reports"+models_collection[tset]['TRAINING_DATA_FOLDER']+"/all.done"
+        
+    benchmark:
+        "benchmarks"+models_collection[tset]['TRAINING_DATA_FOLDER']+"/all_compared.txt"
+        
+    shell:
+        "touch {output.timestamp} "
+  
+
+rule compare_acceptance:
+    input:
+        "Acceptance-validation-comparison.ipynb"
+        
+    log:
+        "reports"+models_collection[tset]['TRAINING_DATA_FOLDER']+"/validate_acceptance_comparison.html"
+        
+    benchmark:
+        "benchmarks"+models_collection[tset]['TRAINING_DATA_FOLDER']+"/validate_acceptance_comparison.txt"
+
+    resources:
+        gpu=1
+    run:
+        for train_key in models_collection.keys():
+            models_collection[train_key]['TEST_DATA'  ] = models_collection[train_key]['FEATHER_FOLDER']+"/acceptance-test"
+            models_collection[train_key]['INPUT_MODEL'] = models_collection[train_key]['MODEL_STORAGE']+"/models/acceptance/saved_model.pb"
+        shell("jupyter nbconvert --to html --execute --ExecutePreprocessor.timeout=-1 --ExecutePreprocessor.kernel_name=LHCb \
+                --no-input --no-prompt --allow-errors {input} --output {log}")
+  
+rule compare_efficiency:
+    input:
+        "Efficiency-validation-comparison.ipynb"
+        
+    log:
+        "reports"+models_collection[tset]['TRAINING_DATA_FOLDER']+"/validate_efficiency_comparison.html"
+        
+    benchmark:
+        "benchmarks"+models_collection[tset]['TRAINING_DATA_FOLDER']+"/validate_efficiency_comparison.txt"
+
+    resources:
+        gpu=1
+    run:
+        for train_key in models_collection.keys():
+            models_collection[train_key]['TEST_DATA'  ] = models_collection[train_key]['FEATHER_FOLDER']+"/efficiency-test"
+            models_collection[train_key]['INPUT_MODEL'] = models_collection[train_key]['MODEL_STORAGE']+"/models/efficiency/saved_model.pb"
+        shell("jupyter nbconvert --to html --execute --ExecutePreprocessor.timeout=-1 --ExecutePreprocessor.kernel_name=LHCb \
+                --no-input --no-prompt --allow-errors {input} --output {log}")
+        
+rule compare_resolution:
+    input:
+        "Resolution-validation-comparison.ipynb"
+        
+    log:
+        "reports"+models_collection[tset]['TRAINING_DATA_FOLDER']+"/validate_resolution_comparison.html"
+        
+    benchmark:
+        "benchmarks"+models_collection[tset]['TRAINING_DATA_FOLDER']+"/validate_resolution_comparison.txt"
+
+    resources:
+        gpu=1
+    run:
+        for train_key in models_collection.keys():
+            models_collection[train_key]['TEST_DATA'  ] = models_collection[train_key]['FEATHER_FOLDER']+"/resolution-test"
+            models_collection[train_key]['INPUT_MODEL'] = models_collection[train_key]['MODEL_STORAGE']+"/models/resolution/saved_model.pb"
+        shell("jupyter nbconvert --to html --execute --ExecutePreprocessor.timeout=-1 --ExecutePreprocessor.kernel_name=LHCb \
+                --no-input --no-prompt --allow-errors {input} --output {log}")
+
+rule compare_covariance:
+    input:
+        "Covariance-validation-comparison.ipynb"
+        
+    log:
+        "reports"+models_collection[tset]['TRAINING_DATA_FOLDER']+"/validate_covariance_comparison.html"
+        
+    benchmark:
+        "benchmarks"+models_collection[tset]['TRAINING_DATA_FOLDER']+"/validate_covariance_comparison.txt"
+
+    resources:
+        gpu=1
+    run:
+        for train_key in models_collection.keys():
+            models_collection[train_key]['TEST_DATA'  ] = models_collection[train_key]['FEATHER_FOLDER']+"/covariance-test"
+            models_collection[train_key]['INPUT_MODEL'] = models_collection[train_key]['MODEL_STORAGE']+"/models/covariance/saved_model.pb"
+        shell("jupyter nbconvert --to html --execute --ExecutePreprocessor.timeout=-1 --ExecutePreprocessor.kernel_name=LHCb \
+                --no-input --no-prompt --allow-errors {input} --output {log}")

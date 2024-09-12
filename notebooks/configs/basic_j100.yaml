@@ -1,0 +1,10 @@
+training_folder: 
+    j100: "/j100"
+model_defaults: 
+    efficiency: ["j100"]
+    acceptance: ["j100"]
+model_variants:
+    efficiency:
+        j100: ["v1"]
+    acceptance:
+        j100: ["v1"]

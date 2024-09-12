@@ -20,7 +20,7 @@ FLOAT_T* resolution (FLOAT_T* output, const FLOAT_T* input, const FLOAT_T* rando
     // Rename constants defined at compile time 
     const int nInputs = RESOLUTION_NUM_FEATURES;
     const int nOutputs = RESOLUTION_NUM_OUTPUTS;
-    const int nRandom = COVARIANCE_NUM_RANDOM;
+    const int nRandom = RESOLUTION_NUM_RANDOM;
 
     // Instanciate variables in the stack.
     FLOAT_T buf[nInputs + nOutputs + nRandom];

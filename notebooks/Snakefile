@@ -1,45 +1,57 @@
+# execute with --config tset=j100
+
 from glob import glob
 from os import environ
 from pathlib import Path
 
-#DATA_STORAGE = Path("/workarea/cloud-storage") / environ["USERNAME"]
-DATA_STORAGE = Path("/workarea/local/private/cache/data")
-MODEL_STORAGE = Path("/workarea/local/private/cache")
+configfile: "train_conf.yaml"
+tset = config.get('tset',"j100")
+
+environ['HOME_DIR'            ] = Path("/workarea/local/shared").as_posix() +"/"+ environ['USERNAME']
+environ['DATA_STORAGE'        ] = Path("/workarea/local/private/cache/data").as_posix()
+environ['TRAINING_DATA_FOLDER'] = config['training_folder'][tset]
+environ['MODEL_STORAGE'       ] = environ['HOME_DIR'] + "/trained_models" + environ['TRAINING_DATA_FOLDER']
+environ['NB_EXPORT'           ] = "False"
+environ['FEATHER_FOLDER'      ] = environ['HOME_DIR'] + "/lb-trksim-train/notebooks/feather_folder" + environ['TRAINING_DATA_FOLDER']
 
 rule all:
     input:
-        acceptance="reports/validate_acceptance.html",
-        efficiency="reports/validate_efficiency.html",
-        resolution="reports/validate_resolution.html",
-        covariance="reports/validate_covariance.html",
-        shared_obj="exported/generated.so"
+        acceptance="reports"+environ['TRAINING_DATA_FOLDER']+"/validate_acceptance.html",
+        efficiency="reports"+environ['TRAINING_DATA_FOLDER']+"/validate_efficiency.html",
+        resolution="reports"+environ['TRAINING_DATA_FOLDER']+"/validate_resolution.html",
+        covariance="reports"+environ['TRAINING_DATA_FOLDER']+"/validate_covariance.html",
+        shared_obj="exported"+environ['TRAINING_DATA_FOLDER']+"/generated.so"
         
     output:
-        timestamp="reports/all.done"
+        timestamp="reports"+environ['TRAINING_DATA_FOLDER']+"/all.done"
+        
+    benchmark:
+        "benchmarks/all.txt"
         
     shell:
         "touch {output.timestamp}"
-        
 
 
 rule preprocessing:
     input:
         notebook="Preprocessing.ipynb",
-        data_files=glob(str(DATA_STORAGE/"10134000/*.root"))
-    
+        data_files=glob(environ['DATA_STORAGE']+environ['TRAINING_DATA_FOLDER']+"/*.root")
     
     output:
-        acceptance_preprocessing=MODEL_STORAGE/"models/acceptance/tX.pkl",
-        efficiency_preprocessing=MODEL_STORAGE/"models/efficiency/tX.pkl",
-        acceptance_train=directory("acceptance-train"),
-        acceptance_test=directory("acceptance-test"),
-        acceptance_validation=directory("acceptance-validation"),
-        efficiency_train=directory("efficiency-train"),
-        efficiency_test=directory("efficiency-test"),
-        efficiency_validation=directory("efficiency-validation")
+        acceptance_preprocessing=environ['MODEL_STORAGE']+"/models/acceptance/tX.pkl",
+        efficiency_preprocessing=environ['MODEL_STORAGE']+"/models/efficiency/tX.pkl",
+        acceptance_train=directory(environ['FEATHER_FOLDER']+"/acceptance-train"),
+        acceptance_test=directory(environ['FEATHER_FOLDER']+"/acceptance-test"),
+        acceptance_validation=directory(environ['FEATHER_FOLDER']+"/acceptance-validation"),
+        efficiency_train=directory(environ['FEATHER_FOLDER']+"/efficiency-train"),
+        efficiency_test=directory(environ['FEATHER_FOLDER']+"/efficiency-test"),
+        efficiency_validation=directory(environ['FEATHER_FOLDER']+"/efficiency-validation")
         
     log:
-        report="reports/preprocessing.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/preprocessing.html"
+        
+    benchmark:
+        "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/preprocessing.txt"
         
     resources:
         gpu=0
@@ -60,17 +72,21 @@ rule preprocessing:
         "--no-input --no-prompt   "
         "{input.notebook} --output {log}"
 
+
 rule train_acceptance:
     input:
         notebook="Acceptance.ipynb",
-        train_data="acceptance-train",
-        validation_data="acceptance-validation"
+        train_data=environ['FEATHER_FOLDER']+"/acceptance-train",
+        validation_data=environ['FEATHER_FOLDER']+"/acceptance-validation"
     
     output:
-        model_pb=MODEL_STORAGE/"models/acceptance/saved_model.pb"
+        model_pb=environ['MODEL_STORAGE']+"/models/acceptance/saved_model.pb"
         
     log:
-        report="reports/train_acceptance.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/train_acceptance.html"
+        
+    benchmark:
+        "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/train_acceptance.txt"
         
     resources:
         gpu=1
@@ -86,14 +102,18 @@ rule train_acceptance:
         "--no-input --no-prompt  "
         "{input.notebook} --output {log}"
   
+  
 rule validate_acceptance:
     input:
         notebook="Acceptance-validation.ipynb",
-        test_data="acceptance-test",
-        model_pb=MODEL_STORAGE/"models/acceptance/saved_model.pb"
+        test_data=environ['FEATHER_FOLDER']+"/acceptance-test",
+        model_pb=environ['MODEL_STORAGE']+"/models/acceptance/saved_model.pb"
         
     log:
-        report="reports/validate_acceptance.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/validate_acceptance.html"
+        
+    benchmark:
+        "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/validate_acceptance.txt"
 
     resources:
         gpu=1
@@ -107,17 +127,21 @@ rule validate_acceptance:
         "--no-input --no-prompt --allow-errors  "
         "{input.notebook} --output {log}"
         
+        
 rule train_efficiency:
     input:
         notebook="Efficiency.ipynb",
-        train_data="efficiency-train",
-        validation_data="efficiency-validation"
+        train_data=environ['FEATHER_FOLDER']+"/efficiency-train",
+        validation_data=environ['FEATHER_FOLDER']+"/efficiency-validation"
     
     output:
-        model_pb=MODEL_STORAGE/"models/efficiency/saved_model.pb"
+        model_pb=environ['MODEL_STORAGE']+"/models/efficiency/saved_model.pb"
         
     log:
-        report="reports/train_efficiency.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/train_efficiency.html"
+        
+    benchmark:
+        "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/train_efficiency.txt"
         
     resources:
         gpu=1
@@ -133,14 +157,18 @@ rule train_efficiency:
         "--no-input --no-prompt   "
         "{input.notebook} --output {log}"
   
+  
 rule validate_efficiency:
     input:
         notebook="Efficiency-validation.ipynb",
-        test_data="efficiency-test",
-        model_pb=MODEL_STORAGE/"models/efficiency/saved_model.pb"
+        test_data=environ['FEATHER_FOLDER']+"/efficiency-test",
+        model_pb=environ['MODEL_STORAGE']+"/models/efficiency/saved_model.pb"
         
     log:
-        report="reports/validate_efficiency.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/validate_efficiency.html"
+        
+    benchmark:
+        "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/validate_efficiency.txt"
 
     resources:
         gpu=1
@@ -154,29 +182,30 @@ rule validate_efficiency:
         "--no-input --no-prompt --allow-errors  "
         "{input.notebook} --output {log}"
         
-
-
+        
 rule preprocessing_gans:
     input:
         notebook="Preprocessing-GANs.ipynb",
-        data_files=glob(str(DATA_STORAGE/"j100/*.root"))
-    
+        data_files=glob(environ['DATA_STORAGE']+environ['TRAINING_DATA_FOLDER']+"/*.root")
     
     output:
-        resolution_preprocessing_x=MODEL_STORAGE/"models/resolution/tX.pkl",
-        resolution_preprocessing_y=MODEL_STORAGE/"models/resolution/tY.pkl",
-        resolution_train=directory("resolution-train"),
-        resolution_test=directory("resolution-test"),
-        resolution_validation=directory("resolution-validation"),
-        covariance_preprocessing_x=MODEL_STORAGE/"models/covariance/tX.pkl",
-        covariance_preprocessing_y=MODEL_STORAGE/"models/covariance/tY.pkl",
-        covariance_train=directory("covariance-train"),
-        covariance_test=directory("covariance-test"),
-        covariance_validation=directory("covariance-validation"),
+        resolution_preprocessing_x=environ['MODEL_STORAGE']+"/models/resolution/tX.pkl",
+        resolution_preprocessing_y=environ['MODEL_STORAGE']+"/models/resolution/tY.pkl",
+        resolution_train=directory(environ['FEATHER_FOLDER']+"/resolution-train"),
+        resolution_test=directory(environ['FEATHER_FOLDER']+"/resolution-test"),
+        resolution_validation=directory(environ['FEATHER_FOLDER']+"/resolution-validation"),
+        covariance_preprocessing_x=environ['MODEL_STORAGE']+"/models/covariance/tX.pkl",
+        covariance_preprocessing_y=environ['MODEL_STORAGE']+"/models/covariance/tY.pkl",
+        covariance_train=directory(environ['FEATHER_FOLDER']+"/covariance-train"),
+        covariance_test=directory(environ['FEATHER_FOLDER']+"/covariance-test"),
+        covariance_validation=directory(environ['FEATHER_FOLDER']+"/covariance-validation"),
 
         
     log:
-        report="reports/preprocessing_gans.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/preprocessing_gans.html"
+        
+    benchmark:
+        "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/preprocessing_gans.txt"
         
     resources:
         gpu=0
@@ -203,14 +232,17 @@ rule preprocessing_gans:
 rule train_resolution:
     input:
         notebook="Resolution.ipynb",
-        train_data="resolution-train",
-        validation_data="resolution-validation"
+        train_data=environ['FEATHER_FOLDER']+"/resolution-train",
+        validation_data=environ['FEATHER_FOLDER']+"/resolution-validation"
     
     output:
-        model_pb=MODEL_STORAGE/"models/resolution/saved_model.pb"
+        model_pb=environ['MODEL_STORAGE']+"/models/resolution/saved_model.pb"
         
     log:
-        report="reports/train_resolution.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/train_resolution.html"
+        
+    benchmark:
+        "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/train_resolution.txt"
         
     resources:
         gpu=1
@@ -230,13 +262,16 @@ rule train_resolution:
 rule validate_resolution:
     input:
         notebook="Resolution-validation.ipynb",
-        test_data="resolution-test",
-        model_pb=MODEL_STORAGE/"models/resolution/saved_model.pb",
-        preprocessing_x=MODEL_STORAGE/"models/resolution/tX.pkl",
-        preprocessing_y=MODEL_STORAGE/"models/resolution/tY.pkl",
+        test_data=environ['FEATHER_FOLDER']+"/resolution-test",
+        model_pb=environ['MODEL_STORAGE']+"/models/resolution/saved_model.pb",
+        preprocessing_x=environ['MODEL_STORAGE']+"/models/resolution/tX.pkl",
+        preprocessing_y=environ['MODEL_STORAGE']+"/models/resolution/tY.pkl",
         
     log:
-        report="reports/validate_resolution.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/validate_resolution.html"
+        
+    benchmark:
+        "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/validate_resolution.txt"
 
     resources:
         gpu=1
@@ -256,14 +291,17 @@ rule validate_resolution:
 rule train_covariance:
     input:
         notebook="Covariance.ipynb",
-        train_data="covariance-train",
-        validation_data="covariance-validation"
+        train_data=environ['FEATHER_FOLDER']+"/covariance-train",
+        validation_data=environ['FEATHER_FOLDER']+"/covariance-validation"
     
     output:
-        model_pb=MODEL_STORAGE/"models/covariance/saved_model.pb"
+        model_pb=environ['MODEL_STORAGE']+"/models/covariance/saved_model.pb"
         
     log:
-        report="reports/train_covariance.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/train_covariance.html"
+        
+    benchmark:
+        "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/train_covariance.txt"
         
     resources:
         gpu=1
@@ -283,13 +321,16 @@ rule train_covariance:
 rule validate_covariance:
     input:
         notebook="Covariance-validation.ipynb",
-        test_data="covariance-test",
-        model_pb=MODEL_STORAGE/"models/covariance/saved_model.pb",
-        preprocessing_x=MODEL_STORAGE/"models/covariance/tX.pkl",
-        preprocessing_y=MODEL_STORAGE/"models/covariance/tY.pkl",
+        test_data=environ['FEATHER_FOLDER']+"/covariance-test",
+        model_pb=environ['MODEL_STORAGE']+"/models/covariance/saved_model.pb",
+        preprocessing_x=environ['MODEL_STORAGE']+"/models/covariance/tX.pkl",
+        preprocessing_y=environ['MODEL_STORAGE']+"/models/covariance/tY.pkl",
         
     log:
-        report="reports/validate_covariance.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/validate_covariance.html"
+        
+    benchmark:
+        "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/validate_covariance.txt"
 
     resources:
         gpu=1
@@ -305,24 +346,28 @@ rule validate_covariance:
         "--no-input --no-prompt --allow-errors  "
         "{input.notebook} --output {log}"
 
+
 rule deploy:
     input:
         notebook="Deploy.ipynb",
-        acceptance_model=MODEL_STORAGE/"models/acceptance/saved_model.pb",
-        acceptance_data="acceptance-validation",
-        efficiency_model=MODEL_STORAGE/"models/efficiency/saved_model.pb",
-        efficiency_data="efficiency-validation",
-        resolution_model=MODEL_STORAGE/"models/resolution/saved_model.pb",
-        resolution_data="resolution-validation",
-        covariance_model=MODEL_STORAGE/"models/covariance/saved_model.pb",
-        covariance_data="covariance-validation"
+        acceptance_model=environ['MODEL_STORAGE']+"/models/acceptance/saved_model.pb",
+        acceptance_data=environ['FEATHER_FOLDER']+"/acceptance-validation",
+        efficiency_model=environ['MODEL_STORAGE']+"/models/efficiency/saved_model.pb",
+        efficiency_data=environ['FEATHER_FOLDER']+"/efficiency-validation",
+        resolution_model=environ['MODEL_STORAGE']+"/models/resolution/saved_model.pb",
+        resolution_data=environ['FEATHER_FOLDER']+"/resolution-validation",
+        covariance_model=environ['MODEL_STORAGE']+"/models/covariance/saved_model.pb",
+        covariance_data=environ['FEATHER_FOLDER']+"/covariance-validation"
        
     log:
-        report="reports/deploy.html"
+        "reports"+environ['TRAINING_DATA_FOLDER']+"/deploy.html"
+        
+    benchmark:
+        "benchmarks"+environ['TRAINING_DATA_FOLDER']+"/deploy.txt"
         
     output:
-        generated_c_file="exported/generated.C",
-        generated_library="exported/generated.so"
+        generated_c_file="exported"+environ['TRAINING_DATA_FOLDER']+"/generated.C",
+        generated_library="exported"+environ['TRAINING_DATA_FOLDER']+"/generated.so"
            
     resources:
         gpu=0
